@@ -49,6 +49,31 @@ TARGET startpoint __attribute__ ((__section__ (".bss")));
 TARGET current_position __attribute__ ((__section__ (".bss")));
 
 /*
+	step flags
+*/
+
+#define	TO_STEP_X	1
+#define	TO_STEP_Y 2
+#define	TO_STEP_Z 4
+#define	TO_STEP_E	8
+#define	TO_STEP_F	16
+volatile uint8_t to_step_flags;
+
+#define	ALWAYS_POLL_ENDSTOPS
+
+#ifdef	ALWAYS_POLL_ENDSTOPS
+	#define	ENDSTOP_DEBOUNCE_THRESHOLD 5
+
+	#define	X_MIN_INDEX 0
+	#define	X_MAX_INDEX 1
+	#define	Y_MIN_INDEX 2
+	#define	Y_MAX_INDEX 3
+	#define	Z_MIN_INDEX	4
+	#define	Z_MAX_INDEX 5
+	volatile uint8_t endstop_debounce_counters[6];
+#endif
+
+/*
 	utility functions
 */
 
@@ -446,13 +471,43 @@ void dda_start(DDA *dda) {
 */
 void dda_step(DDA *dda) {
 	// called from interrupt context! keep it as simple as possible
-	uint8_t	did_step = 0;
 
+	/*
+		perform steps calculated last interrupt
+	*/
+	if (to_step_flags & TO_STEP_X)
+		x_step();
+	if (to_step_flags & TO_STEP_Y)
+		y_step();
+	if (to_step_flags & TO_STEP_Z)
+		z_step();
+	if (to_step_flags & TO_STEP_E)
+		e_step();
+
+	/*
+		END exclusive interrupt
+		BEGIN interruptible section
+		from here on in, we run like normal code, not blocking any other interrupts
+	*/
+	#if STEP_INTERRUPT_INTERRUPTIBLE
+		// since we have sent steps to all the motors that will be stepping and the rest of this function isn't so time critical,
+		// this interrupt can now be interruptible
+		// it's important that our timer doesn't fire while we're still running, but the timer code disables its interrupt until the next time setTimer is called at the end of this function.
+		sei();
+	#endif
+
+	uint8_t	did_step = 0;
+	to_step_flags = 0;
+
+	/*
+		decide which axes will step
+	*/
 	#ifdef ACCELERATION_TEMPORAL
 		if (dda->x_counter <= 0) {
 			if ((current_position.X != dda->endpoint.X) /* &&
 				(x_max() != dda->x_direction) && (x_min() == dda->x_direction) */) {
-				x_step();
+// 				x_step();
+				to_step_flags |= TO_STEP_X;
 			if (dda->x_direction)
 				current_position.X++;
 			else
@@ -464,7 +519,8 @@ void dda_step(DDA *dda) {
 		if (dda->y_counter <= 0) {
 			if ((current_position.Y != dda->endpoint.Y) /* &&
 				(y_max() != dda->y_direction) && (y_min() == dda->y_direction) */) {
-				y_step();
+// 				y_step();
+				to_step_flags |= TO_STEP_Y;
 			if (dda->y_direction)
 				current_position.Y++;
 			else
@@ -476,7 +532,8 @@ void dda_step(DDA *dda) {
 		if (dda->z_counter <= 0) {
 			if ((current_position.Z != dda->endpoint.Z) /* &&
 				(z_max() != dda->z_direction) && (z_min() == dda->z_direction) */) {
-				z_step();
+// 				z_step();
+				to_step_flags |= TO_STEP_Z;
 			if (dda->z_direction)
 				current_position.Z++;
 			else
@@ -488,7 +545,8 @@ void dda_step(DDA *dda) {
 		if (dda->e_counter <= 0) {
 			if ((current_position.E != dda->endpoint.E) /* &&
 				(e_max() != dda->e_direction) && (e_min() == dda->e_direction) */) {
-				e_step();
+// 				e_step();
+				to_step_flags |= TO_STEP_E;
 			if (dda->e_direction)
 				current_position.E++;
 			else
@@ -498,12 +556,12 @@ void dda_step(DDA *dda) {
 			dda->e_delta--;
 		}
 	#else
-		if ((current_position.X != dda->endpoint.X) /* &&
-				(x_max() != dda->x_direction) && (x_min() == dda->x_direction) */) {
+		if (current_position.X != dda->endpoint.X) {
 			dda->x_counter -= dda->x_delta;
 			if (dda->x_counter < 0) {
-				x_step();
-				did_step = 1;
+// 				x_step();
+// 				did_step = 1;
+				to_step_flags |= TO_STEP_X;
 				if (dda->x_direction)
 					current_position.X++;
 				else
@@ -513,12 +571,12 @@ void dda_step(DDA *dda) {
 			}
 		}
 
-		if ((current_position.Y != dda->endpoint.Y) /* &&
-				(y_max() != dda->y_direction) && (y_min() == dda->y_direction) */) {
+		if (current_position.Y != dda->endpoint.Y) {
 			dda->y_counter -= dda->y_delta;
 			if (dda->y_counter < 0) {
-				y_step();
-				did_step = 1;
+// 				y_step();
+// 				did_step = 1;
+				to_step_flags |= TO_STEP_Y;
 				if (dda->y_direction)
 					current_position.Y++;
 				else
@@ -528,12 +586,12 @@ void dda_step(DDA *dda) {
 			}
 		}
 
-		if ((current_position.Z != dda->endpoint.Z) /* &&
-				(z_max() != dda->z_direction) && (z_min() == dda->z_direction) */) {
+		if (current_position.Z != dda->endpoint.Z) {
 			dda->z_counter -= dda->z_delta;
 			if (dda->z_counter < 0) {
-				z_step();
-				did_step = 1;
+// 				z_step();
+// 				did_step = 1;
+				to_step_flags |= TO_STEP_Z;
 				if (dda->z_direction)
 					current_position.Z++;
 				else
@@ -546,8 +604,9 @@ void dda_step(DDA *dda) {
 		if (current_position.E != dda->endpoint.E) {
 			dda->e_counter -= dda->e_delta;
 			if (dda->e_counter < 0) {
-				e_step();
-				did_step = 1;
+// 				e_step();
+// 				did_step = 1;
+				to_step_flags |= TO_STEP_E;
 				if (dda->e_direction)
 					current_position.E++;
 				else
@@ -558,15 +617,117 @@ void dda_step(DDA *dda) {
 		}
 	#endif
 
-	#if STEP_INTERRUPT_INTERRUPTIBLE
-		// since we have sent steps to all the motors that will be stepping and the rest of this function isn't so time critical,
-		// this interrupt can now be interruptible
-		// however we must ensure that we don't step again while computing the below, so disable *this* interrupt but allow others to fire
-// 		disableTimerInterrupt();
-		sei();
+	// turn off step outputs, hopefully they've been on long enough by now to register with the drivers
+	// if not, too bad.
+	unstep();
+
+	// save step flags in did_step, which probably would be more descriptive if named 'should have stepped' given endstop checking
+	did_step = to_step_flags;
+
+	/*
+		poll endstops
+	*/
+	#ifdef	ALWAYS_POLL_ENDSTOPS
+		if (x_min()) {
+			if (endstop_debounce_counters[X_MIN_INDEX] > ENDSTOP_DEBOUNCE_THRESHOLD) {
+				if (dda->x_direction == 0)
+					to_step_flags &= ~TO_STEP_X;
+			}
+			else
+				endstop_debounce_counters[X_MIN_INDEX]++;
+		}
+		else
+			endstop_debounce_counters[X_MIN_INDEX] = 0;
+
+		if (x_max()) {
+			if (endstop_debounce_counters[X_MAX_INDEX] > ENDSTOP_DEBOUNCE_THRESHOLD) {
+				if (dda->x_direction == 1)
+					to_step_flags &= ~TO_STEP_X;
+			}
+			else
+				endstop_debounce_counters[X_MAX_INDEX]++;
+		}
+		else
+			endstop_debounce_counters[X_MAX_INDEX] = 0;
+
+		if (y_min()) {
+			if (endstop_debounce_counters[Y_MIN_INDEX] > ENDSTOP_DEBOUNCE_THRESHOLD) {
+				if (dda->y_direction == 0)
+					to_step_flags &= ~TO_STEP_Y;
+			}
+			else
+				endstop_debounce_counters[Y_MIN_INDEX]++;
+		}
+		else
+			endstop_debounce_counters[Y_MIN_INDEX] = 0;
+
+		if (y_max()) {
+			if (endstop_debounce_counters[Y_MAX_INDEX] > ENDSTOP_DEBOUNCE_THRESHOLD) {
+				if (dda->y_direction == 1)
+					to_step_flags &= ~TO_STEP_Y;
+			}
+			else
+				endstop_debounce_counters[Y_MAX_INDEX]++;
+		}
+		else
+			endstop_debounce_counters[Y_MAX_INDEX] = 0;
+
+		if (z_min()) {
+			if (endstop_debounce_counters[Z_MIN_INDEX] > ENDSTOP_DEBOUNCE_THRESHOLD) {
+				if (dda->z_direction == 0)
+					to_step_flags &= ~TO_STEP_Z;
+			}
+			else
+				endstop_debounce_counters[Z_MIN_INDEX]++;
+		}
+		else
+			endstop_debounce_counters[Z_MIN_INDEX] = 0;
+
+		if (z_max()) {
+			if (endstop_debounce_counters[Z_MAX_INDEX] > ENDSTOP_DEBOUNCE_THRESHOLD) {
+				if (dda->z_direction == 1)
+					to_step_flags &= ~TO_STEP_Z;
+			}
+			else
+				endstop_debounce_counters[Z_MAX_INDEX]++;
+		}
+		else
+			endstop_debounce_counters[Z_MAX_INDEX] = 0;
 	#endif
 
-	#ifdef ACCELERATION_REPRAP
+	/*
+		update position
+	*/
+	// now we WILL step next interrupt given flags, so we will still maintain a precise positon, albeit not perfectly in sync. If the interrupt never fires again, we will be one step out
+	if (to_step_flags & TO_STEP_X) {
+		if (dda->x_direction)
+			current_position.X++;
+		else
+			current_position.X--;
+	}
+	if (to_step_flags & TO_STEP_Y) {
+		if (dda->y_direction)
+			current_position.Y++;
+		else
+			current_position.Y--;
+	}
+	if (to_step_flags & TO_STEP_Z) {
+		if (dda->z_direction)
+			current_position.Z++;
+		else
+			current_position.Z--;
+	}
+	if (to_step_flags & TO_STEP_E) {
+		if (dda->e_direction)
+			current_position.E++;
+		else
+			current_position.E--;
+	}
+
+	/*
+		now we choose how long until next step, based on chosen acceleration algorithm
+	*/
+	#if defined ACCELERATION_REPRAP
 		// linear acceleration magic, courtesy of http://www.embedded.com/columns/technicalinsights/56800129?printable=true
 		if (dda->accel) {
 			if (
@@ -581,8 +742,7 @@ void dda_step(DDA *dda) {
 			}
 			// else we are already at target speed
 		}
-	#endif
-	#ifdef ACCELERATION_RAMPING
+	#elif defined ACCELERATION_RAMPING
 		// - algorithm courtesy of http://www.embedded.com/columns/technicalinsights/56800129?printable=true
 		// - for simplicity, taking even/uneven number of steps into account dropped
 		// - number of steps moved is always accurate, speed might be one step off
@@ -610,8 +770,7 @@ void dda_step(DDA *dda) {
 				break;
 		}
 		dda->step_no++;
-	#endif
-	#ifdef ACCELERATION_TEMPORAL
+	#elif defined ACCELERATION_TEMPORAL
 		dda->c = dda->x_counter;
 		if (dda->y_counter < dda->c)
 			dda->c = dda->y_counter;
@@ -660,9 +819,4 @@ void dda_step(DDA *dda) {
 	}
 
 	setTimer(dda->c >> 8);
-
-	// turn off step outputs, hopefully they've been on long enough by now to register with the drivers
-	// if not, too bad. or insert a (very!) small delay here, or fire up a spare timer or something.
-	// we also hope that we don't step before the drivers register the low- limit maximum speed if you think this is a problem.
-	unstep();
 }

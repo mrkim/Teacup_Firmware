@@ -492,6 +492,35 @@ void dda_step(DDA *dda) {
 		sei();
 	#endif
 
+	/*
+	update position
+	*/
+	// now we WILL step next interrupt given flags, so we will still maintain a precise positon, albeit not perfectly in sync. If the interrupt never fires again, we will be one step out
+	if (to_step_flags & TO_STEP_X) {
+		if (dda->x_direction)
+			current_position.X++;
+		else
+			current_position.X--;
+	}
+	if (to_step_flags & TO_STEP_Y) {
+		if (dda->y_direction)
+			current_position.Y++;
+		else
+			current_position.Y--;
+	}
+	if (to_step_flags & TO_STEP_Z) {
+		if (dda->z_direction)
+			current_position.Z++;
+		else
+			current_position.Z--;
+	}
+	if (to_step_flags & TO_STEP_E) {
+		if (dda->e_direction)
+			current_position.E++;
+		else
+			current_position.E--;
+	}
+
 	uint8_t	did_step = 0;
 	to_step_flags = 0;
 
@@ -504,10 +533,6 @@ void dda_step(DDA *dda) {
 				(x_max() != dda->x_direction) && (x_min() == dda->x_direction) */) {
 // 				x_step();
 				to_step_flags |= TO_STEP_X;
-			if (dda->x_direction)
-				current_position.X++;
-			else
-				current_position.X--;
 			}
 			dda->x_counter += dda->x_step_interval;
 			dda->x_delta--;
@@ -517,10 +542,6 @@ void dda_step(DDA *dda) {
 				(y_max() != dda->y_direction) && (y_min() == dda->y_direction) */) {
 // 				y_step();
 				to_step_flags |= TO_STEP_Y;
-			if (dda->y_direction)
-				current_position.Y++;
-			else
-				current_position.Y--;
 			}
 			dda->y_counter += dda->y_step_interval;
 			dda->y_delta--;
@@ -530,10 +551,6 @@ void dda_step(DDA *dda) {
 				(z_max() != dda->z_direction) && (z_min() == dda->z_direction) */) {
 // 				z_step();
 				to_step_flags |= TO_STEP_Z;
-			if (dda->z_direction)
-				current_position.Z++;
-			else
-				current_position.Z--;
 			}
 			dda->z_counter += dda->z_step_interval;
 			dda->z_delta--;
@@ -543,10 +560,6 @@ void dda_step(DDA *dda) {
 				(e_max() != dda->e_direction) && (e_min() == dda->e_direction) */) {
 // 				e_step();
 				to_step_flags |= TO_STEP_E;
-			if (dda->e_direction)
-				current_position.E++;
-			else
-				current_position.E--;
 			}
 			dda->e_counter += dda->e_step_interval;
 			dda->e_delta--;
@@ -558,10 +571,6 @@ void dda_step(DDA *dda) {
 // 				x_step();
 // 				did_step = 1;
 				to_step_flags |= TO_STEP_X;
-				if (dda->x_direction)
-					current_position.X++;
-				else
-					current_position.X--;
 
 				dda->x_counter += dda->total_steps;
 			}
@@ -573,10 +582,6 @@ void dda_step(DDA *dda) {
 // 				y_step();
 // 				did_step = 1;
 				to_step_flags |= TO_STEP_Y;
-				if (dda->y_direction)
-					current_position.Y++;
-				else
-					current_position.Y--;
 
 				dda->y_counter += dda->total_steps;
 			}
@@ -588,10 +593,6 @@ void dda_step(DDA *dda) {
 // 				z_step();
 // 				did_step = 1;
 				to_step_flags |= TO_STEP_Z;
-				if (dda->z_direction)
-					current_position.Z++;
-				else
-					current_position.Z--;
 
 				dda->z_counter += dda->total_steps;
 			}
@@ -603,10 +604,6 @@ void dda_step(DDA *dda) {
 // 				e_step();
 // 				did_step = 1;
 				to_step_flags |= TO_STEP_E;
-				if (dda->e_direction)
-					current_position.E++;
-				else
-					current_position.E--;
 
 				dda->e_counter += dda->total_steps;
 			}
@@ -690,35 +687,6 @@ void dda_step(DDA *dda) {
 		else
 			endstop_debounce_counters[Z_MAX_INDEX] = 0;
 	#endif
-
-	/*
-		update position
-	*/
-	// now we WILL step next interrupt given flags, so we will still maintain a precise positon, albeit not perfectly in sync. If the interrupt never fires again, we will be one step out
-	if (to_step_flags & TO_STEP_X) {
-		if (dda->x_direction)
-			current_position.X++;
-		else
-			current_position.X--;
-	}
-	if (to_step_flags & TO_STEP_Y) {
-		if (dda->y_direction)
-			current_position.Y++;
-		else
-			current_position.Y--;
-	}
-	if (to_step_flags & TO_STEP_Z) {
-		if (dda->z_direction)
-			current_position.Z++;
-		else
-			current_position.Z--;
-	}
-	if (to_step_flags & TO_STEP_E) {
-		if (dda->e_direction)
-			current_position.E++;
-		else
-			current_position.E--;
-	}
 
 	/*
 		now we choose how long until next step, based on chosen acceleration algorithm

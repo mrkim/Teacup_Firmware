@@ -68,6 +68,20 @@ static void SpecialMoveE(int32_t e, uint32_t f) {
 	enqueue(&t);
 }
 
+
+
+// Index 0 = pd6 fan, Index 1 = pd5 bed.  Value = -1 to turn off, 0-180 to set position.
+static void setServo(uint8_t index, uint16_t value) {
+
+	if (value == 255) {
+	     servoPos[index] = -1;
+	}else{
+	if (value > 180) value = 180;
+	     servoPos[index] = value;
+	}	
+}		
+
+
 /************************************************************************//**
 
   \brief Processes command stored in global \ref next_target.
@@ -266,7 +280,12 @@ void process_gcode_command() {
 			print_queue();
 		#endif
 	}
-	else if (next_target.seen_M) {
+	else if (next_target.seen_M) { //sersendf_P(PSTR("M: code %d\n"), next_target.M);
+		if (next_target.M == 300) {
+			// M300 set servo 0, angle 0-180,  255 = off ---
+		     setServo(0, next_target.S); // fw
+		}else
+
 		switch (next_target.M) {
 			// M2- program end
 			case 2:
@@ -497,7 +516,8 @@ void process_gcode_command() {
 				sersendf_P(PSTR("%x:%x->%x"), next_target.S, *(volatile uint8_t *)(next_target.S), next_target.P);
 				(*(volatile uint8_t *)(next_target.S)) = next_target.P;
 				// newline is sent from gcode_parse after we return
-				break;
+				break;  	
+				
 			#endif /* DEBUG */
 				// unknown mcode: spit an error
 			default:

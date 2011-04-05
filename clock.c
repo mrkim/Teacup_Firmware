@@ -60,6 +60,8 @@ void clock_10ms() {
 	wd_reset();
 
 	temp_tick();
+	
+	set_servo(); // pd6 OC0A // fw  dddd/???
 
 	ifclock(CLOCK_FLAG_250MS) {
 		clock_250ms();

@@ -35,6 +35,8 @@ typedef enum {
 
 void temp_init(void);
 
+void servo_init(void);
+
 void temp_sensor_tick(void);
 
 uint8_t	temp_achieved(void);
@@ -43,5 +45,8 @@ void temp_set(temp_sensor_t index, uint16_t temperature);
 uint16_t temp_get(temp_sensor_t index);
 
 void temp_print(temp_sensor_t index);
+
+extern volatile int32_t servoPos[];
+void set_servo(void);
 
 #endif	/* _TEMP_H */

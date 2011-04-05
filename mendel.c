@@ -226,6 +226,9 @@ void init(void) {
 
 	// set up temperature inputs
 	temp_init();
+	
+	// set up Servos
+        servo_init();
 
 	// enable interrupts
 	sei();

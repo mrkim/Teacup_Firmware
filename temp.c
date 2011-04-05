@@ -66,6 +66,95 @@ struct {
 #include	"analog.h"
 #endif
 
+
+#define SERVO_COUNT 2
+volatile int32_t servoPos[SERVO_COUNT];
+
+//called every 10ms  
+// ms between servo updates; conservative to avoid 7805 overheating
+#define SERVO_CYCLE_LENGTH 10
+volatile uint8_t servo_cycle = 0;
+
+//--- for clock of 16Mhz, prescaler 256  using an 8 bit counter --- 
+//--- to achieve a 0.9 - 2.1ms freq range.
+//---  35 = 892 min angle       15 = 2083 max angle
+
+// Hitec servo HS-55 1500 - 1900 uMS
+// operate 180¡ when given a pulse signal ranging from 600usec to 2400usec, 1500 neutral
+
+#define PWM2_MIN_PULSE   32
+#define PWM2_MAX_PULSE   155
+
+
+
+void servo_init() {
+	int s;
+	for (s = 0; s < SERVO_COUNT; s++) {
+		servoPos[s] = -1;
+	}
+	// input clock 16meg Hz.     prescalers:  TCCR0B  0 8 64 256 1024
+	//  from old code OCR is set to 9600 to 38400 
+	// old based on prescale 8 and 16 bit counter: range  208.33 -- 69.44 increments of 160
+
+	PORTD &= ~_BV(6);  // set output
+	DDRD  |= _BV(6);   // set output
+	
+	//--- TCCRoA: comoA1 comoAo comoB1 comoBo -     -    WGM01  WGM00
+	//---           1       0     0      0                 1      1
+	//--- TCCRoB: FOC0A  FOCoB    -      -    WGM02 CS02 CS01   CS00
+	//---           0      0      0      0      0     1    0      0
+	//---                                             prescale 256
+	TCCR0A = 0b10000011; 
+	TCCR0B = 0b00000100; // prescale 256
+	OCR0A  = PWM2_MIN_PULSE;	
+}
+
+
+uint8_t getPosition(uint8_t servo){
+	switch( servo ){
+		case 1: return (OCR1A); break;
+		case 2: return (int8_t)(OCR0A); break;
+		case 3: return (int8_t)(OCR0B); break;
+	}
+	return 0;  /* If not defined */
+}
+
+
+uint8_t getTcnt0(uint8_t servo){
+	switch( servo ){
+		case 2: return (int8_t)(TCNT0); break;
+	}
+	return 0;  /* If not defined */
+}
+
+
+uint8_t getPinD(bit){
+	 if ((PIND & (1<<bit)) > 0) return 1; else return 0;
+}
+
+long map(long x, long in_min, long in_max, long out_min, long out_max) {
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
+
+
+void set_servo() { 
+	uint16_t temp_pos;
+	if (servo_cycle == 0) { 
+		if (servoPos[0] != -1) { 
+			temp_pos = map(servoPos[0], 0, 180, PWM2_MIN_PULSE, PWM2_MAX_PULSE); 
+			              //sersendf_P(PSTR("angle %u  "), servoPos[0]);
+			              //sersendf_P(PSTR("   temp %u \n"), temp_pos);
+                        OCR0A  = temp_pos;
+		        servoPos[0] = -1;	
+		}
+	}
+	servo_cycle++;
+	if (servo_cycle > SERVO_CYCLE_LENGTH) { servo_cycle = 0; }
+}
+
+
+
+
 /// set up temp sensors. Currently only the 'intercom' sensor needs initialisation.
 void temp_init() {
 	temp_sensor_t i;
@@ -99,7 +188,7 @@ void temp_init() {
 			default: /* prevent compiler warning */
 				break;
 		}
-	}
+	}			
 }
 
 /// called every 10ms from clock.c - check all temp sensors that are ready for checking

@@ -49,7 +49,7 @@ struct {
 	uint16_t					last_read_temp; ///< last received reading
 	uint16_t					target_temp;		///< manipulate attached heater to attempt to achieve this value
 
-	uint16_t					temp_residency; ///< how long have we been close to target temperature in temp ticks?
+	uint8_t						temp_residency; ///< how long have we been close to target temperature?
 
 	uint16_t					next_read_time; ///< how long until we can read this sensor again?
 } temp_sensors_runtime[NUM_TEMP_SENSORS];
@@ -269,8 +269,8 @@ void temp_sensor_tick() {
 			}
 			temp_sensors_runtime[i].last_read_temp = temp;
 
-			if (labs((int16_t)(temp - temp_sensors_runtime[i].target_temp)) < (TEMP_HYSTERESIS*4)) {
-				if (temp_sensors_runtime[i].temp_residency < (TEMP_RESIDENCY_TIME*100))
+			if (labs(temp - temp_sensors_runtime[i].target_temp) < TEMP_HYSTERESIS) {
+				if (temp_sensors_runtime[i].temp_residency < TEMP_RESIDENCY_TIME)
 					temp_sensors_runtime[i].temp_residency++;
 			}
 			else {
@@ -291,7 +291,7 @@ uint8_t	temp_achieved() {
 	uint8_t all_ok = 255;
 
 	for (i = 0; i < NUM_TEMP_SENSORS; i++) {
-		if (temp_sensors_runtime[i].temp_residency < (TEMP_RESIDENCY_TIME*100))
+		if (temp_sensors_runtime[i].temp_residency < TEMP_RESIDENCY_TIME)
 			all_ok = 0;
 	}
 	return all_ok;
@@ -304,15 +304,12 @@ void temp_set(temp_sensor_t index, uint16_t temperature) {
 	if (index >= NUM_TEMP_SENSORS)
 		return;
 
-	// only reset residency if temp really changed
-	if (temp_sensors_runtime[index].target_temp != temperature) {
-		temp_sensors_runtime[index].target_temp = temperature;
-		temp_sensors_runtime[index].temp_residency = 0;
-	#ifdef	TEMP_INTERCOM
-		if (temp_sensors[index].temp_type == TT_INTERCOM)
-			send_temperature(temp_sensors[index].temp_pin, temperature);
-	#endif
-	}
+	temp_sensors_runtime[index].target_temp = temperature;
+	temp_sensors_runtime[index].temp_residency = 0;
+#ifdef	TEMP_INTERCOM
+	if (temp_sensors[index].temp_type == TT_INTERCOM)
+		send_temperature(temp_sensors[index].temp_pin, temperature);
+#endif
 }
 
 /// return most recent reading for a sensor
